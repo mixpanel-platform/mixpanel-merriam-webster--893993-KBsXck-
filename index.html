@@ -72,7 +72,8 @@
 		            state.done = event.name == params.end_event;
 		        }
 		    };
-		    _.each(items, stateUpdater);
+		    var filteredItems = _.filter(items, function(item) {return item.event.name != '$campaign_delivery';});
+		    _.each(filteredItems, stateUpdater);
 		    return state;
 		}
 
@@ -87,7 +88,8 @@
 		            state.done = event.name == params.end_event;
 		        }
 		    };
-		    _.each(events, stateUpdater);
+		    var filteredItems = _.filter(items, function(event) {return event.name != '$campaign_delivery';});
+		    _.each(filteredItems, stateUpdater);
 		    if (!params.property) {
 		        state.propval = 'No Property';
 		    }
