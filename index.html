@@ -88,11 +88,10 @@
 		            state.done = event.name == params.end_event;
 		        }
 		    };
-		    var filteredItems = _.filter(events, function(event) {return event.name != '$campaign_delivery';});
-		    _.each(filteredItems, stateUpdater);
-		    if (!params.property) {
+		    var filteredEvents = _.filter(events, function(event) {return event.name != '$campaign_delivery';});
+		    _.each(filteredEvents, stateUpdater);
+		    if (!params.property)
 		        state.propval = 'No Property';
-		    }
 		    return state;
 		}
 
@@ -104,7 +103,10 @@
 		    var state = item.value;
 		    var end_time = state.sequence.length > 0 ? state.sequence[state.sequence.length - 1].time : false;
 		    var sequenceFilter = function(item) {return end_time - item.time < params.conversion_length;};
-		    return {sequence: _.pluck(_.filter(state.sequence, sequenceFilter), 'name'),
+		    return {sequence: _.chain(state.sequence)
+		                       .filter(sequenceFilter)
+		                       .pluck('name')
+		                       .value(),
 		            property: state.propval? state.propval : 'No Property'};
 		}
 
@@ -115,34 +117,33 @@
 		           ||(params.max_length && item.sequence.length > params.max_length));
 		}
 
-		function returnSequence(item) {
-		    return item.sequence;
-		}
-
-		function returnProp(item) {
-		    return item.property;
-		}
-
-		function returnKey(item) {
+		function getKey(item) {
 		    return item.key[item.key.length - 1];
 		}
 
 		function theTop(n) {
 		    return function(accumulators, items) {
 		        var count = 0;
-		        var countAdder = function(item) {count += item};
-		        _.each(_.pluck(items, 'value'), countAdder);
-		        _.each(_.pluck(accumulators, 'count'), countAdder);
-		        var ret = _.pluck(accumulators, 'results').reduce(function(a,b) {return a.concat(b);}, []).concat(items);
-		        ret.sort(function(a, b) {return b.value - a.value;});
-		        return {results: ret.slice(0, n), count: count};
+		        var countAdder = function(value) {count += value};
+		        _.chain(items)
+		         .pluck('value')
+		         .each(countAdder);
+		        _.chain(accumulators)
+		         .pluck('count')
+		         .each(countAdder);
+		        return {results: _.pluck(accumulators, 'results')
+		                          .reduce(function(a,b) {return a.concat(b);},[])
+		                          .concat(items)
+		                          .sort(function(a, b) {return b.value - a.value;})
+		                          .slice(0, n),
+		                count: count};
 		    };
-		};
+		}
 
 		function mapToFinalResult(item) {
 		    var removeLastAndAddPercentage = function(result) {
 		        result.key.pop();
-		        result['percentage'] = Math.round(result.value * 1000 / item.value.count) / 10;
+		        result.percentage = Math.round(result.value * 1000 / item.value.count) / 10;
 		        result.sequence = result.key;
 		        result.count = result.value;
 		        delete result.value;
@@ -162,8 +163,8 @@
 		        .filter(filterForEndEvent)
 		        .map(mapToSequence)
 		        .filter(filterToRelevantSequences)
-		        .groupBy([returnSequence, returnProp], mixpanel.reducer.count())
-		        .groupBy([returnKey], theTop(params.num_results))
+		        .groupBy(['sequence', 'property'], mixpanel.reducer.count())
+		        .groupBy([getKey], theTop(params.num_results))
 		        .map(mapToFinalResult);
 		    }
 		    else {
@@ -172,8 +173,8 @@
 		        .filter(filterForEndEvent)
 		        .map(mapToSequence)
 		        .filter(filterToRelevantSequences)
-		        .groupBy([returnSequence, returnProp], mixpanel.reducer.count())
-		        .groupBy([returnKey], theTop(params.num_results))
+		        .groupBy(['sequence', 'property'], mixpanel.reducer.count())
+		        .groupBy([getKey], theTop(params.num_results))
 		        .map(mapToFinalResult);
 		    }
 		}
@@ -203,7 +204,7 @@
       </div>
       <div class="dropdown-section">
       	<div class="select left">
-      		<div class="dropdown-label">Count between:</div>
+      		<div class="dropdown-label">Sequence Length (# events):</div>
       		<div id="minLengthSelect"></div>
       		<div id="maxLengthSelect"></div>
       	</div>
@@ -234,8 +235,8 @@
 		time_unit.val(86400000);
 		var min_sequence_length = $('#minLengthSelect').MPSelect({items: items(1,2,3,4,5,6,7,8,9,10)});
 		var max_sequence_length = $('#maxLengthSelect').MPSelect({items: items(1,2,3,4,5,6,7,8,9,10)});
-		min_sequence_length.val(2);
-		max_sequence_length.val(8);
+		min_sequence_length.val(1);
+		max_sequence_length.val(5);
 		var max_results = $('#numResultsSelect').MPSelect({items: items(2, 5, 10, 15, 50)});
 		max_results.val(5);
 		var start_event = $('#startEventSelect').MPEventSelect();
@@ -267,7 +268,7 @@
 						res.push({});
 					}
 					var resultMapper = function(item) {
-		                var propval = item.key.property;
+		                var propval = item.key.property + ' (' + item.key.count + ')';
 		                for (i = 0; i < params.num_results; i++) {
 		                    var result = 'no flow';
 		                    if (item.value[i])
